@@ -1,43 +1,60 @@
 const express = require('express');
 const axios = require('axios');
+
 const app = express();
 const PORT = 5000;
+const WINDOW_SIZE = 10; 
+let windowCurrState = []; 
+let windowPrevState = []; 
 
-const WINDOW_SIZE = 10;
-const storedNumbers = [];
-
-const fetchNumberFromAPI = async (numberId) => {
-  try {
-    // Replace with the actual third-party API URL
-    const response = await axios.get(`http://localhost:3000/numbers/${numberId}`, { timeout: 500 });
-    return response.data[Math.floor(Math.random() * response.data.length)];
-  } catch (error) {
-    return null; // Handle errors or timeouts gracefully
-  }
+const fetchNumber = async (numberId) => {
+    try {
+        const response = await axios.get(`https://localhost:3000/numbers/${numberId}`, { timeout: 500 });
+        return response.data; 
+    } catch (error) {
+        console.log("Error fetching number:", error.message);
+        return null; 
+    }
+};
+const updateWindowState = (newNumber) => {
+    if (newNumber !== null && !windowCurrState.includes(newNumber)) {
+        if (windowCurrState.length >= WINDOW_SIZE) {
+            windowPrevState = [...windowCurrState]; 
+            windowCurrState.shift(); 
+        }
+        windowCurrState.push(newNumber);
+    }
 };
 
+
+const calculateAverage = () => {
+    if (windowCurrState.length === 0) return 0;
+    const sum = windowCurrState.reduce((a, b) => a + b, 0);
+    return (sum / windowCurrState.length).toFixed(2);
+};
+
+
 app.get('/numbers/:numberId', async (req, res) => {
-  const { numberId } = req.params;
-  if (!['p', 'f', 'e', 'r'].includes(numberId)) {
-    return res.status(400).json({ error: 'Invalid number ID. Must be "p", "f", "e", or "r".' });
-  }
+    const { numberId } = req.params;
 
-  const number = await fetchNumberFromAPI(numberId);
-  if (number !== null && !storedNumbers.includes(number)) {
-    if (storedNumbers.length >= WINDOW_SIZE) {
-      storedNumbers.shift(); // Remove the oldest number
+    const validIds = ['p', 'f', 'e', 'r']; 
+    if (!validIds.includes(numberId)) {
+        return res.status(400).json({ error: 'Invalid number ID. Use p, f, e, or r.' });
     }
-    storedNumbers.push(number); // Add the new number
-  }
 
-  const average = storedNumbers.length > 0 ? storedNumbers.reduce((a, b) => a + b, 0) / storedNumbers.length : 0;
+    const fetchedNumber = await fetchNumber(numberId);
+    updateWindowState(fetchedNumber);
 
-  res.json({
-    numbersBefore: [...storedNumbers],
-    fetchedNumber: number,
-    numbersAfter: [...storedNumbers],
-    average,
-  });
+    const response = {
+        windowPrevState,
+        windowCurrState,
+        numbers: windowCurrState,
+        avg: calculateAverage(),
+    };
+
+    res.json(response);
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Average Calculator Microservice is running on port ${PORT}`);
+});
